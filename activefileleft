@@ -55,6 +55,9 @@ MODULE Module1
     CONST num z_stack_approach:=250;
     CONST num z_stack_base:=150;
 
+    ! == Offsets
+    Const num y_triangle_offset:=20;
+
     ! === LEFT ARM (L) HOME POSITION ===
     CONST robtarget HomeL:=[[300,200,200],[0,1,0,0],[1,-1,-1,0],[-138.091203512,9E+09,9E+09,9E+09,9E+09,9E+09]];
     CONST robtarget HomeL_travel:=[[300,100,300],[0,1,0,0],[1,1,-1,0],[-138.091203512,9E+09,9E+09,9E+09,9E+09,9E+09]];
@@ -73,7 +76,7 @@ MODULE Module1
     CONST robtarget cylinder_depart:=[[x_cylinder,y_right,z_approach],[0,1,0,0],[0,0,0,0],[-138.091192686,9E+09,9E+09,9E+09,9E+09,9E+09]];
 
     ! === PRISM/TRIANGLE positions (X=413) - LEFT ARM: moves LEFT to RIGHT ===
-    CONST robtarget prism_pickup:=[[x_prism,y_left,z_prism_pick],[0,0.707107,0.707107,0],[0,0,0,0],[-138.091192686,9E+09,9E+09,9E+09,9E+09,9E+09]];
+    CONST robtarget prism_pickup:=[[x_prism,y_left + y_triangle_offset ,z_prism_pick],[0,0.707107,0.707107,0],[0,0,0,0],[-138.091192686,9E+09,9E+09,9E+09,9E+09,9E+09]];
     CONST robtarget prism_deposit:=[[x_prism,y_right,z_prism_pick],[0,0.707107,0.707107,0],[0,0,0,0],[-138.091192686,9E+09,9E+09,9E+09,9E+09,9E+09]];
     CONST robtarget prism_approach:=[[x_prism,y_left,z_approach],[0,0.707107,0.707107,0],[0,0,0,0],[-138.091192686,9E+09,9E+09,9E+09,9E+09,9E+09]];
     CONST robtarget prism_depart:=[[x_prism,y_right,z_approach],[0,0.707107,0.707107,0],[0,0,0,0],[-138.091192686,9E+09,9E+09,9E+09,9E+09,9E+09]];
