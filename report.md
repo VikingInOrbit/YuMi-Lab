@@ -45,27 +45,23 @@ A main goal was to take what we have learned about robotics so far and actually 
 
 \subsection{Theoretical Background}
 
-Key concepts used in this project are directly drawn from the TEL200 lectures:
+This project is sourced from TEL200 lecture material and uses those concepts directly in our ABB YuMi implementation. The knowledge base topics are:
 
-Robot topics in this project is: pose, configuration, trajectory, kinematics, speed control and Jacobian/singularities.
+\begin{itemize}
+    \item Pose and frame representation
+    \item Configuration space (C-space)
+    \item Path and trajectory
+    \item Kinematics (forward/inverse)
+    \item Speed control and settling
+    \item Manipulator Jacobian and singularities
+    \item Transformation matrices
+    \item Digital I/O and safety trap logic
+    \item RAPID control flow and routines
+    \item Smart component mechanisms
+\end{itemize}
 
-
-	From Chapter 2: Representing position and orientation
-
-
-\textbf{Pose and frame representation (Ch. 2)}
-\textbf{From Chapter 2: Pose and Frame Representation}
-\begin{quote}
-"Know position and orientation (Pose)
-Coordinate systems and representations
-Not only in 2D and 3D but also in joint- or configuration space
-Not only now but also as a function of time: Describe motion and time
-Time varying pose, paths, trajectories
-Accelerating bodies and coordinate systems
-Dynamics of rigid, mechanical bodies
-Creating smooth paths and trajectories
-Kinematic modelling and control of robot (arm)"
-\end{quote}
+\textbf{Pose and frame representation (Chapter 2)}
+A robot pose defines the tool center point location and orientation in space. In our YuMi implementation, robtargets store Cartesian position ([x, y, z]), quaternion orientation ([q1, q2, q3, q4]) and configuration data. Using this representation makes each motion instruction explicit, repeatable and easier to follow.
 
 \begin{figure}[H]
     \centering
@@ -74,120 +70,35 @@ Kinematic modelling and control of robot (arm)"
     \label{fig:yumi_home}
 \end{figure}
 
+\textbf{Configuration space (C-space, Chapter 2)}
+C-space is the set of all valid joint states. Each robtarget includes cf1..cf4 values to specify the desired inverse kinematics solution and prevent ambiguity. Carefully selected configurations help avoid joint limits and collisions.
 
+\textbf{Path and trajectory (Chapter 3)}
+A path is a spatial sequence of poses. A trajectory adds timing and velocity. In the project, MoveJ is used for high-speed joint-space transit and MoveL for precise Cartesian motion. Speed and zone settings are chosen based on task requirements.
 
-	\textbf{From Chapter 3: Time and Motion}
+\textbf{Kinematics (Chapter 7)}
+Kinematics maps joint angles to end-effector pose (forward kinematics) and computes joint angles from a desired pose (inverse kinematics). RAPID handles inverse kinematics internally, but the programmer must define targets with clear orientation and configuration data to ensure smooth execution.
 
-\begin{quote}
-"Pose: the position and orientation $\xi$ of an object (Ch 2.)
-Path: a varying pose $\xi(s)$, for some parameter s
-Trajectory: a path with specified timing, $\xi(s(t))$, for t
-Defines the time-evolution, or speed along the path from A to B
-The notions of path and trajectory can also be generalized to motion in the configuration space or joint space of a robot."
-(TEL200 Ch2)
-\end{quote}
+\textbf{Speed control and settling}
+Motion speed is set according to task: fast for transit, slow and accurate for grasp/place. Settling commands (wait, NoMove) reduce residual motion before and after interaction to improve grip reliability.
 
-A pose is the position and orientation of the tool center point. In RAPID, we represent this using robtarget structures:
-- 3D position [x, y, z]
-- Quaternion orientation [q1,q2,q3,q4]
-- Configuration data [cf1..cf4]
-- External axes [ext1..ext6]
+\textbf{Manipulator Jacobian and singularities (Chapter 8)}
+The Jacobian matrix relates joint velocities to Cartesian end-effector velocity and maps forces between joint and task space. Singularities occur when the Jacobian loses rank, leading to poor control and potentially unbounded joint rates. The project avoids such states by keeping motion within a safe workspace and avoiding extreme joint postures.
 
-Implementation note: We defined robtargets for home, pickup, place, stack, and emergency-rest positions. This makes each motion instruction express the desired pose clearly.
+\textbf{Transformation matrices (Chapters 3/7)}
+In theory, poses are represented by homogeneous transformation matrices. In RobotStudio, consistent frame conventions take the place of manual matrix handling and enable correct coordinate conversions between base, tool, and object frames.
 
-\textbf{From Chapter 2: Configuration Space (C-space)}
-\begin{quote}
-"Not only in 2D \& 3D but also in joint- or configuration space" (TEL200 Ch2)
-\end{quote}
+\textbf{Digital I/O and safety trap logic}
+Digital inputs (cube, cylinder, prism, home, emergency) and output (EmergencyButtonPress) connect physical controls and visual feedback. The emergency button is handled as a trap routine that immediately interrupts the main program, sets the output signal, and waits until the emergency input is released.
 
-C-space is the set of all joint configurations. Each robtarget includes configuration data to avoid ambiguity.
+\textbf{RAPID control flow and routines}
+The main loop polls digital inputs and calls specific procedures for each shape movement and home reset. Modular routine structure improves readability and makes the code easier to debug and expand.
 
-Implementation note: We selected configurations that avoid joint limits and potential self-collision for the left arm. All path points in the stack routine use consistent configuration class values.
+\textbf{Smart component mechanisms}
+Smart components in RobotStudio simulate mechanical behavior tied to signal states. The emergency button is implemented as a mechanism with pressed and released poses, and the output signal drives the PoseMover state for visual consistency.
 
-\textbf{From Chapter 3: Path and Trajectory}
-\begin{quote}
-"Pose: the position and orientation $\xi$ of an object (Ch 2.) Path: a varying pose $\xi(s)$, for some parameter s Trajectory: a path with specified timing, $\xi(s(t))$, for t Defines the time-evolution, or speed along the path from A to B The notions of path and trajectory can also be generalized to motion in the configuration space or joint space of a robot."
-\end{quote}
-
-A path is a sequence of poses; a trajectory adds timing and velocity. In ABB RAPID, this corresponds to sequences of MoveJ/MoveL instructions with speed/zone settings.
-
-Implementation note: For pick/place we use MoveL with low speed/zone fine to ensure straight-line Cartesian paths; for repositioning we use MoveJ with higher speed for efficiency.
-
-\textbf{From Chapter 7: Kinematics}
-\begin{quote}
-"Kinematics: A branch of mechanics that studies the motion of a body, or system of bodies. Concerned with positions (and angles) and velocities (translational and angular). Not concerned with mass, forces or moments (that’s Dynamics, Ch. 9)."
-\end{quote}
-
-Forward kinematics maps joint angles to end-effector pose; inverse kinematics computes joint angles from the target pose.
-
-Implementation note: RAPID and RobotStudio internally solve inverse kinematics for each motion command; we minimize ambiguity and singularity risk by keeping input poses valid and consistent.
-
-\textbf{Settling and Motion Speed}
-\begin{quote}
-"In practice, the robot motion speed depends on task: fast transit, slow precision, with explicit settling after each grasp/place operation."
-\end{quote}
-
-Settling time is the period after motion when the end-effector stabilizes. Motion speed must be task-dependent.
-
-Implementation note: We use slower speeds around contact tasks (grasp/place), high speed for transit, and small waits/NoMove commands for stabilization after insertion and before release.
-
-\textbf{From Chapter 8: Manipulator Velocity and Jacobian}
-\begin{quote}
-"A robot’s end-effector moves in Cartesian space with a translational and rotational velocity – a spatial velocity; however, that velocity is a consequence of the velocities of the individual robot joints; this section introduces the relationship between the velocity of the joints and the spatial velocity of the end-effector: the Jacobian matrix."
-\end{quote}
-
-\begin{figure}[H]
-    \centering
-    \fbox{\parbox{0.7\linewidth}{
-        \centering
-        \textbf{Placeholder Image} \\[5pt]
-    }}
-    \label{fig:yumi_home}
-    \caption{Manipulator Jacobian and velocity (TEL200 Ch8)}
-\end{figure}
-
-\begin{itemize}
-    \item \textbf{Forward kinematics}: Calculates end-effector position from joint angles.
-    \item \textbf{Inverse kinematics}: Determines joint angles required to reach a target pose.
-    \item \textbf{Singularities}: Configurations where the robot loses degrees of freedom and may require infinite joint velocities.
-    \item \textbf{Manipulator Jacobian}: Relates joint velocities to end-effector spatial velocity and is used for trajectory rate control.
-\end{itemize}
-
-The Jacobian relates joint velocities to end-effector velocities; singularities occur when the Jacobian loses rank.
-
-Implementation note: We avoid singular configurations by:
-- staying within a safe workspace around the work plate
-- combining MoveJ and MoveL with controlled speeds
-- avoiding extreme wrist configurations during stacking.
-
-\textbf{From Chapter 3/7: Transformation Matrices}
-\begin{quote}
-"The derivative of pose can be determined by expressing pose as a homogeneous transformation matrix and taking the derivative with respect to time..."
-\end{quote}
-
-Robot poses relate via homogeneous transformations, enabling coordinate conversion from base to tool to object frames.
-
-Implementation note: Targets are defined and adjusted with consistent base frames in RobotStudio; no manual matrix math needed, but the concept is used when copying/calibrating points.
-
-\textbf{Summary of theory-to-practice}
-\begin{quote}
-"We map theory into practice through clearly defined targets, motion commands, and safe IO control."
-\end{quote}
-
-We map each theoretical concept to code: pose definitions as robtargets, C-space through configuration data, trajectories through MoveJ/MoveL sequences, kinematics via inverse solver, speed and settling via speed/zone settings, and Jacobian awareness via safe workspace decisions.
-
-
-	\textbf{Practical Applications}
-\begin{itemize}
-    \item \textbf{Resolved-rate motion control}: Using the Jacobian to compute joint velocities for desired end-effector velocity.
-    \item \textbf{Force-velocity relationships}: The Jacobian also relates forces at the end-effector to joint torques.
-\end{itemize}
-\begin{quote}
-"The Jacobian matrix can be used to compute: Manipulability, Resolved-rate motion control, Force-velocity Relationships, Numerical Inverse Kinematics..." (TEL200 Ch8)
-\end{quote}
-
-Simulation in RobotStudio acts as a digital tvin for the real robot. This allows safe testing, debugging, and optimization before deploying code to physical hardware.
-
+\textbf{Theory-to-practice summary}
+The project translates theory into practice by applying each concept in code: robtargets for poses, configuration parameters for C-space, MoveJ/MoveL for paths/trajectories, speed/settling for control, Jacobian-aware motion design, and digital I/O for responsive, safe operation.
 
 
 
