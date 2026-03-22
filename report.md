@@ -26,18 +26,17 @@ The YuMi robot is a collaborative dual-arm robot designed for flexible and safe 
 
 \section{Introduction}
 
-For this TEL200 assignment, we worked with ABB’s YuMi robot in RobotStudio to bring theory into a hands-on work. Our goal was to program the YuMi robot, using RAPID to control motion, detect user input, and handle emergency situations.
+For this TEL200 assignment we worked with ABB’s YuMi robot in RobotStudio to make the theory we’ve learned into a hands-on robot system. Our main goal was to program the YuMi robot so it can move in a repeatable way, read button input, and stop safely if the emergency input is triggered.
 
 The key objectives in this project are:
 
 \begin{itemize}
-    \item Show a complete setup and test in RobotStudio with RAPID eg: target positions and trajectory.
-    \item Using different move commands, "MoveJ and MoveL", to get both predictable movement.
-    \item Use digital I/O "cube, cylinder, prism, home, emergency stop", and use a virtual smart component to visualize emergency states.
+    \item Show a complete setup and test in RobotStudio with RAPID, including target positions and path planning.
+    \item Explore the difference between MoveJ and MoveL so we can get both fast, stable moves and precise interaction moves.
+    \item Implement digital I/O for cube/cylinder/prism selection, home reset, and emergency stop; and use a virtual smart component to visualize emergency state.
 \end{itemize}
 
-
-And ain goal was to take wat we  had lernd about robotics so far and actually apply it in practice. Later in this paper we will go through the method, results and discussion of the project.
+A main goal was to take what we have learned about robotics so far and actually apply it in practice. Later in this paper we go through method, results, and discussion for the project.
 
 \section{Method}
 
@@ -135,13 +134,16 @@ In order to model the Emergency stop button moving up and down during simulation
 
 \subsection{Theoretical Background}
 
-Robot motion is based on kinematics, which describes how joint movements translate into end-effector position and orientation.
-
-A robot pose consists of both position and orientation in 3D space. This is typically represented using coordinate systems and transformation matrices.
-
 Key concepts used in this project are directly drawn from the TEL200 lectures:
 
+Robot topics in this project is: pose, configuration, trajectory, kinematics, speed control and Jacobian/singularities.
+
+
 	From Chapter 2: Representing position and orientation
+
+
+\textbf{Pose and frame representation (Ch. 2)}
+\textbf{From Chapter 2: Pose and Frame Representation}
 \begin{quote}
 "Know position and orientation (Pose)
 Coordinate systems and representations
@@ -164,39 +166,65 @@ Kinematic modelling and control of robot (arm)"
 
 
 	\textbf{From Chapter 3: Time and Motion}
+
 \begin{quote}
 "Pose: the position and orientation $\xi$ of an object (Ch 2.)
 Path: a varying pose $\xi(s)$, for some parameter s
 Trajectory: a path with specified timing, $\xi(s(t))$, for t
 Defines the time-evolution, or speed along the path from A to B
 The notions of path and trajectory can also be generalized to motion in the configuration space or joint space of a robot."
+(TEL200 Ch2)
 \end{quote}
 
-In our implementation, we used these concepts directly:
-- The pick-and-place sequence is defined as a trajectory set by ordered targets in the workcell.
-- We adjusted feed rates and motion types (MoveJ versus MoveL) to enforce time evolution and velocity profiles depending on task requirement.
-- For straight-line interactions (approach, grasp, place) we selected slower translation speeds and finer motion segments to improve accuracy.
+A pose is the position and orientation of the tool center point. In RAPID, we represent this using robtarget structures:
+- 3D position [x, y, z]
+- Quaternion orientation [q1,q2,q3,q4]
+- Configuration data [cf1..cf4]
+- External axes [ext1..ext6]
 
-In addition, we included explicit settling handling in our code by inserting short waits and fine stops after critical pick/place moves. This reduces residual oscillations caused by tool load or gripper contact and ensures that the next motion starts from a stable pose.
+Implementation note: We defined robtargets for home, pickup, place, stack, and emergency-rest positions. This makes each motion instruction express the desired pose clearly.
 
-"Kinematics: A branch of mechanics that studies the motion of a body, or system of bodies. Concerned with positions (and angles) and velocities (translational and angular). Not concerned with mass, forces or moments (that’s Dynamics, Ch. 9)"
-\end{quote}
-In practical robot programming, it is important to consider both the settling time and the speed of motion. Settling time refers to the period required for the robot to stabilize after a movement, ensuring that the end-effector is accurately positioned before interacting with objects. This is especially critical during tasks that require precision, such as picking or placing items.
-
-The speed of motion is adjusted depending on whether the robot is performing a simple move or an interaction. For example, when moving between distant points (e.g., returning to home position), higher speeds can be used to maximize efficiency. However, during interactions with objects (e.g., grasping or stacking), the speed is reduced to prevent collisions and ensure safe handling. This dynamic adjustment is implemented in the RAPID code by setting different speed parameters for motion instructions, allowing the robot to balance speed and accuracy based on the task.
-
-\begin{figure}[H]
-    \centering
-    \includegraphics[width=0.5\linewidth]{usedAttachments/TEL200_Ch3_p013_x617_y373_w182_h95_01.png}
-    \label{fig:yumi_home}
-    \caption{Orientation matrix and rotation axis (TEL200 Ch3)}
-\end{figure}
-
-
-	\textbf{From Chapter 8: Manipulator velocity and Jacobian}
+\textbf{From Chapter 2: Configuration Space (C-space)}
 \begin{quote}
-"A robot’s end-effector moves in Cartesian space with a translational and rotational velocity – a spatial velocity; However, that velocity is a consequence of the velocities of the individual robot joints; This section introduces the relationship between the velocity of the joints and the spatial velocity of the end-effector: the Jacobian matrix."
+"Not only in 2D & 3D but also in joint- or configuration space" (TEL200 Ch2)
 \end{quote}
+
+C-space is the set of all joint configurations. Each robtarget includes configuration data to avoid ambiguity.
+
+Implementation note: We selected configurations that avoid joint limits and potential self-collision for the left arm. All path points in the stack routine use consistent configuration class values.
+
+\textbf{From Chapter 3: Path and Trajectory}
+\begin{quote}
+"Pose: the position and orientation $\xi$ of an object (Ch 2.) Path: a varying pose $\xi(s)$, for some parameter s Trajectory: a path with specified timing, $\xi(s(t))$, for t Defines the time-evolution, or speed along the path from A to B The notions of path and trajectory can also be generalized to motion in the configuration space or joint space of a robot."
+\end{quote}
+
+A path is a sequence of poses; a trajectory adds timing and velocity. In ABB RAPID, this corresponds to sequences of MoveJ/MoveL instructions with speed/zone settings.
+
+Implementation note: For pick/place we use MoveL with low speed/zone fine to ensure straight-line Cartesian paths; for repositioning we use MoveJ with higher speed for efficiency.
+
+\textbf{From Chapter 7: Kinematics}
+\begin{quote}
+"Kinematics: A branch of mechanics that studies the motion of a body, or system of bodies. Concerned with positions (and angles) and velocities (translational and angular). Not concerned with mass, forces or moments (that’s Dynamics, Ch. 9)."
+\end{quote}
+
+Forward kinematics maps joint angles to end-effector pose; inverse kinematics computes joint angles from the target pose.
+
+Implementation note: RAPID and RobotStudio internally solve inverse kinematics for each motion command; we minimize ambiguity and singularity risk by keeping input poses valid and consistent.
+
+\textbf{Settling and Motion Speed}
+\begin{quote}
+"In practice, the robot motion speed depends on task: fast transit, slow precision, with explicit settling after each grasp/place operation."
+\end{quote}
+
+Settling time is the period after motion when the end-effector stabilizes. Motion speed must be task-dependent.
+
+Implementation note: We use slower speeds around contact tasks (grasp/place), high speed for transit, and small waits/NoMove commands for stabilization after insertion and before release.
+
+\textbf{From Chapter 8: Manipulator Velocity and Jacobian}
+\begin{quote}
+"A robot’s end-effector moves in Cartesian space with a translational and rotational velocity – a spatial velocity; however, that velocity is a consequence of the velocities of the individual robot joints; this section introduces the relationship between the velocity of the joints and the spatial velocity of the end-effector: the Jacobian matrix."
+\end{quote}
+
 \begin{figure}[H]
     \centering
     \fbox{\parbox{0.7\linewidth}{
@@ -208,67 +236,35 @@ The speed of motion is adjusted depending on whether the robot is performing a s
 \end{figure}
 
 \begin{itemize}
-    \item \textbf{Forward kinematics}: Calculates end-effector position from joint angles
-    \item \textbf{Inverse kinematics}: Determines joint angles required to reach a target
-    \item \textbf{Singularities}: Configurations where the robot loses degrees of freedom
-    \item \textbf{Manipulator Jacobian}: Relates joint velocities to end-effector velocity
+    \item \textbf{Forward kinematics}: Calculates end-effector position from joint angles.
+    \item \textbf{Inverse kinematics}: Determines joint angles required to reach a target pose.
+    \item \textbf{Singularities}: Configurations where the robot loses degrees of freedom and may require infinite joint velocities.
+    \item \textbf{Manipulator Jacobian}: Relates joint velocities to end-effector spatial velocity and is used for trajectory rate control.
 \end{itemize}
 
-	\textbf{Configuration Space and Path Planning}
+The Jacobian relates joint velocities to end-effector velocities; singularities occur when the Jacobian loses rank.
+
+Implementation note: We avoid singular configurations by:
+- staying within a safe workspace around the work plate
+- combining MoveJ and MoveL with controlled speeds
+- avoiding extreme wrist configurations during stacking.
+
+\textbf{From Chapter 3/7: Transformation Matrices}
 \begin{quote}
-"Not only in 2D \& 3D but also in joint- or configuration space" (TEL200 Ch2)
+"The derivative of pose can be determined by expressing pose as a homogeneous transformation matrix and taking the derivative with respect to time..."
 \end{quote}
-Configuration space (C-space) is the set of all possible robot configurations, typically defined by joint angles. Path planning in C-space allows robots to avoid obstacles and reach targets efficiently.
 
+Robot poses relate via homogeneous transformations, enabling coordinate conversion from base to tool to object frames.
 
-\begin{figure}[H]
-    \centering
-    \fbox{\parbox{0.7\linewidth}{
-        \centering
-        \textbf{Placeholder Image} \\[5pt]
-    }}
-    \label{fig:yumi_home}
-    \caption{Configuration space illustration (TEL200 Ch2)}
-\end{figure}
+Implementation note: Targets are defined and adjusted with consistent base frames in RobotStudio; no manual matrix math needed, but the concept is used when copying/calibrating points.
 
-	\textbf{Transformation Matrices and Jacobian}
-Robot pose and motion are mathematically described using transformation matrices:
+\textbf{Summary of theory-to-practice}
 \begin{quote}
-"The derivative of pose can be determined by expressing pose as a homogeneous transformation matrix and taking the derivative with respect to time..." (TEL200 Ch3)
+"We map theory into practice through clearly defined targets, motion commands, and safe IO control."
 \end{quote}
-Transformation matrices are fundamental tools in robotics for describing the pose (position and orientation) of the robot's end-effector. A homogeneous transformation matrix combines rotation and translation, allowing for easy computation of the robot's pose in different coordinate frames. By chaining these matrices, the robot's kinematic chain can be modeled, enabling calculation of the end-effector's position from joint angles (forward kinematics) and vice versa (inverse kinematics).
 
-The Jacobian matrix is derived from the transformation matrices and represents the relationship between joint velocities and end-effector velocities. It is used for tasks such as resolved-rate motion control, where the desired velocity of the end-effector is translated into joint velocities. The Jacobian also plays a crucial role in force control, as it relates forces applied at the end-effector to torques at the joints. Understanding and computing the Jacobian is essential for advanced robot control, including avoiding singularities and optimizing manipulability.
-\begin{figure}[H]
-    \centering
-    \fbox{\parbox{0.7\linewidth}{
-        \centering
-        \textbf{Placeholder Image} \\[5pt]
-    }}
-    \label{fig:yumi_home}
-    \caption{Transformation matrix formula (TEL200 Ch3)}
-\end{figure}
-The manipulator Jacobian relates joint velocities to end-effector velocity:
-\begin{quote}
-"A Jacobian is the matrix equivalent of the derivative – the derivative of a vector-valued function of a vector with respect to a vector." (TEL200 Ch8)
-\end{quote}
-\begin{figure}[H]
-    \centering
-    \fbox{\parbox{0.7\linewidth}{
-        \centering
-        \textbf{Placeholder Image} \\[5pt]
-    }}
-    \label{fig:yumi_home}
-    \caption{Jacobian matrix formula (TEL200 Ch8)}
-\end{figure}
+We map each theoretical concept to code: pose definitions as robtargets, C-space through configuration data, trajectories through MoveJ/MoveL sequences, kinematics via inverse solver, speed and settling via speed/zone settings, and Jacobian awareness via safe workspace decisions.
 
-	\textbf{Singularities and Manipulability}
-Singularities are robot configurations where the Jacobian loses rank, causing loss of control or infinite velocities:
-\begin{quote}
-"Singularities: Configurations where the robot loses degrees of freedom" (TEL200 Ch7)
-"Jacobian Condition and Manipulability" (TEL200 Ch8)
-\end{quote}
-Manipulability is often measured by the condition number or determinant of the Jacobian, indicating how well the robot can move in all directions.
 
 	\textbf{Practical Applications}
 \begin{itemize}
